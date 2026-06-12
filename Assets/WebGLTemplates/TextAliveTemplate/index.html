@@ -16,7 +16,7 @@
   <div id="unity-container">
     <canvas id="unity-canvas"></canvas>
   </div>
-  <div id="media"></div>
+  <audio id="media" style="display: none;"></audio>
   <script>
     //UnityWebGLの読み込み設定(Unityビルド時に自動で書き換わる)
     var buildUrl = "Build";
@@ -37,14 +37,23 @@
         
         // Unityインスタンスを保持するグローバル変数
         window.unityInstance = null;
+        window.lyricsDataCached = null; // Unity起動前のデータ一時退避用
+
+        initTextAlive();
 
         script.onload = () => {
             createUnityInstance(canvas, config, (progress) => {
                 // 読み込み進捗
             }).then((instance) => {
                 window.unityInstance = instance;
-                // Unityの準備ができたらTextAliveを動かす
-                initTextAlive();
+                // もしUnityより先に歌詞が抽出できていたら、ここで送信する
+                console.log("Unityの起動が完了しました。楽曲のロードを開始します...")
+                if(window.player){
+                    window.player.createFromSongUrl("https://piapro.jp/t/6W2N");
+                }
+                if (window.lyricsDataCached) {
+                    window.unityInstance.SendMessage('GameManager', 'SetSongDataFromJS', window.lyricsDataCached);
+                }
             }).catch((message) => {
                 alert(message);
             });
@@ -55,9 +64,11 @@
         function initTextAlive() {
             const player = new TextAliveApp.Player({
                 app: {
-                    name: "Song-Fishing-WithMiku",
+                    appName: "Song-Fishing-WithMiku",
                     token:"rEmOWtB15JjOdHcY"
                 },
+                autoplay: true,
+                requestedVolume: 50,
                 mediaElement: document.getElementById("media")
             });
 
@@ -80,9 +91,7 @@
             player.addListener({
                 onAppReady(app) {
                     console.log("TextAlive API が利用可能になりました。");
-                    setTimeout(() => {
-                        player.createFromSongUrl("https://piapro.jp/t/6W2N");
-                    }, 3000); // 少し遅延させてから曲を読み込む
+                        console.log("読み込みを開始します。");
                 },
                 onVideoReady() {
                     console.log("曲の読み込み完了。歌詞データを抽出します。");
@@ -107,7 +116,14 @@
 
                     // JSONにしてUnityのGameManagerへ一括送信
                     let jsonString = JSON.stringify({ data: lyricsList });
-                    window.unityInstance.SendMessage('GameManager', 'SetSongDataFromJS', jsonString);
+                    if(window.unityInstance){
+                        console.log("Unityに歌詞データを送信します。");
+                        window.unityInstance.SendMessage('GameManager', 'SetSongDataFromJS', jsonString);
+                    } else {
+                        // Unityがまだ起動していない場合は、データをキャッシュしておく
+                        console.log("Unityがまだ起動していないため、歌詞データをキャッシュします。");
+                        window.lyricsDataCached = jsonString;
+                    }
                 },
                 onTimeUpdate(position) {
                     // 現在の再生時間（秒）をUnityにリアルタイム送信
