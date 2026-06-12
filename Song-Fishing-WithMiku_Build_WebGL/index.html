@@ -56,7 +56,7 @@
             const player = new TextAliveApp.Player({
                 app: {
                     name: "Song-Fishing-WithMiku",
-                    //token:"rEmOWtB15JjOdHcY"
+                    token:"rEmOWtB15JjOdHcY"
                 },
                 mediaElement: document.getElementById("media")
             });
@@ -79,7 +79,10 @@
 
             player.addListener({
                 onAppReady(app) {
-                    player.createFromSongUrl("https://piapro.jp/t/6W2N");
+                    console.log("TextAlive API が利用可能になりました。");
+                    setTimeout(() => {
+                        player.createFromSongUrl("https://piapro.jp/t/6W2N");
+                    }, 3000); // 少し遅延させてから曲を読み込む
                 },
                 onVideoReady() {
                     console.log("曲の読み込み完了。歌詞データを抽出します。");
