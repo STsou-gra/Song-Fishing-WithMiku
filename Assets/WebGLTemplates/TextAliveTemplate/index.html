@@ -55,8 +55,8 @@
         function initTextAlive() {
             const player = new TextAliveApp.Player({
                 app: {
-                    appName: "UnityTextAliveGame",
-                    token:"rEmOWtB15JjOdHcY"
+                    name: "Song-Fishing-WithMiku",
+                    //token:"rEmOWtB15JjOdHcY"
                 },
                 mediaElement: document.getElementById("media")
             });
@@ -64,10 +64,25 @@
             // グローバルに保持（jslibから叩けるようにする）
             window.player = player;
 
+            window.PlaySongJS = function() {
+                if(window.player){
+                window.player.requestPlay();
+                console.log("Unityからのリクエストで曲の再生を開始");
+                }
+            };
+            window.PauseSongJS = function() {
+                if(window.player){
+                window.player.requestPause();
+                console.log("Unityからのリクエストで曲の一時停止");
+                }
+            };
+
             player.addListener({
                 onAppReady(app) {
-                    // テスト用に過去のマジカルミライ楽曲を読み込む
-                    player.createFromSongUrl("https://piapro.jp/t/ULcJ/20250205120202");
+                    console.log("TextAlive API が利用可能になりました。");
+                    setTimeout(() => {
+                        player.createFromSongUrl("https://piapro.jp/t/6W2N");
+                    }, 3000); // 少し遅延させてから曲を読み込む
                 },
                 onVideoReady() {
                     console.log("曲の読み込み完了。歌詞データを抽出します。");
