@@ -38,8 +38,11 @@
         // Unityインスタンスを保持するグローバル変数
         window.unityInstance = null;
         window.lyricsDataCached = null; // Unity起動前のデータ一時退避用
-
-        initTextAlive();
+        window.player = null; // TextAlive Playerのグローバル変数
+        window.addEventListener("DOMContentLoaded", () => {
+            initTextAlive();
+            document.body.appendChild(script);// TextAliveの準備と並行してUnityを読み込む
+        });
 
         script.onload = () => {
             createUnityInstance(canvas, config, (progress) => {
@@ -47,6 +50,9 @@
             }).then((instance) => {
                 window.unityInstance = instance;
                 // もしUnityより先に歌詞が抽出できていたら、ここで送信する
+                console.log("Unityの起動が完了しました。楽曲のロードを開始します...")
+
+                //もしすでに歌詞データのキャッシュがあれば即座にUnityへ送信
                 if (window.lyricsDataCached) {
                     window.unityInstance.SendMessage('GameManager', 'SetSongDataFromJS', window.lyricsDataCached);
                 }
@@ -58,11 +64,14 @@
 
         // ─── TextAlive API の実装 ───
         function initTextAlive() {
+            console.log("TextAlive API の実装を開始します...");
             const player = new TextAliveApp.Player({
                 app: {
                     appName: "Song-Fishing-WithMiku",
                     token:"rEmOWtB15JjOdHcY"
                 },
+                autoplay: true,
+                requestedVolume: 50,
                 mediaElement: document.getElementById("media")
             });
 
@@ -85,12 +94,13 @@
             player.addListener({
                 onAppReady(app) {
                     console.log("TextAlive API が利用可能になりました。");
-                        console.log("読み込みを開始します。");
-                        setTimeout(() => {
-                            console.log("3秒経過");
-                            player.createFromSongUrl("https://piapro.jp/t/6W2N");
-                        }, 3000); // 少し遅延させてから曲の読み込みを開始
+                    console.log("読み込みを開始します。");
+                    if(!app.songUrl){
+                        console.warn("楽曲URLが指定されていません。デフォルトの楽曲を読み込みます。");
+                        player.createFromSongUrl("https://piapro.jp/t/6W2N/20251215164617");
+                    }
                 },
+
                 onVideoReady() {
                     console.log("曲の読み込み完了。歌詞データを抽出します。");
                     let lyricsList = [];
