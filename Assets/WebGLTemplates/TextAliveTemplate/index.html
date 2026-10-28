@@ -4,19 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Song-FishingWithMiku</title>
-  <script src="https://unpkg.com/textalive-app-api@latest/dist/index.js"></script>
+  <!-- バージョンを固定する（@latest だと将来の更新で動きが変わることがある） -->
+  <script src="https://unpkg.com/textalive-app-api@0.5.3/dist/index.js"></script>
   <style>
     body{margin: 0; background-color: #000; overflow: hidden;}
     #unity-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0;}
     #unity-canvas {width: 100%; height:100%; background: #231f20;}
+    /* TextAliveが音源と楽曲情報バナーをこの中に配置する */
     #media {position: absolute; bottom: 10px; right: 10px; z-index: 10; color: white;}
+    #start-button {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20;
+      padding: 16px 40px; font-size: 24px; border: none; border-radius: 8px;
+      background: #39c5bb; color: #fff; cursor: pointer;
+    }
+    #start-button:disabled {background: #555; cursor: default;}
   </style>
 </head>
 <body>
   <div id="unity-container">
     <canvas id="unity-canvas"></canvas>
   </div>
-  <audio id="media" style="display: none;"></audio>
+  <!-- mediaElement は <audio> ではなく <div> を渡す -->
+  <div id="media"></div>
+  <button id="start-button" disabled>読み込み中...</button>
   <script>
     //UnityWebGLの読み込み設定(Unityビルド時に自動で書き換わる)
     var buildUrl = "Build";
@@ -31,14 +41,26 @@
             productVersion: "0.1",
         };
 
+        // 読み込む楽曲
+        // コンテスト指定曲は、募集要項に載っている beatId / chordId / repetitiveSegmentId / lyricId / lyricDiffId を
+        // video に書くと、歌詞のタイミングなどが正しいデータになる
+        var SONG_URL = "https://piapro.jp/t/6W2N/20251215164617";
+        var SONG_OPTIONS = {
+            // video: { beatId: 0, chordId: 0, repetitiveSegmentId: 0, lyricId: 0, lyricDiffId: 0 }
+        };
+
         var canvas = document.querySelector("#unity-canvas");
+        var startButton = document.querySelector("#start-button");
         var script = document.createElement("script");
         script.src = loaderUrl;
-        
+
         // Unityインスタンスを保持するグローバル変数
         window.unityInstance = null;
         window.lyricsDataCached = null; // Unity起動前のデータ一時退避用
-        window.player = null; // TextAlive Playerのグローバル変数
+        window.player = null; // TextAlive Playerのグローバル変数（jslibから使う）
+        var isUnityReady = false;
+        var isTimerReady = false;
+
         window.addEventListener("DOMContentLoaded", () => {
             initTextAlive();
             document.body.appendChild(script);// TextAliveの準備と並行してUnityを読み込む
@@ -49,18 +71,35 @@
                 // 読み込み進捗
             }).then((instance) => {
                 window.unityInstance = instance;
-                // もしUnityより先に歌詞が抽出できていたら、ここで送信する
-                console.log("Unityの起動が完了しました。楽曲のロードを開始します...")
+                isUnityReady = true;
+                console.log("Unityの起動が完了しました。")
 
                 //もしすでに歌詞データのキャッシュがあれば即座にUnityへ送信
                 if (window.lyricsDataCached) {
                     window.unityInstance.SendMessage('GameManager', 'SetSongDataFromJS', window.lyricsDataCached);
                 }
+                updateStartButton();
             }).catch((message) => {
                 alert(message);
             });
         };
-        document.body.appendChild(script);
+
+        // ブラウザはユーザーのクリックがないと音を鳴らせないので、
+        // 再生はスタートボタンのクリックから requestPlay() で始める
+        startButton.addEventListener("click", () => {
+            if (window.player && window.player.requestPlay()) {
+                startButton.style.display = "none";
+                console.log("スタートボタンで曲の再生を開始");
+            }
+        });
+
+        // Unityの起動と再生の準備（onTimerReady）の両方が終わったらボタンを押せるようにする
+        function updateStartButton() {
+            if (isUnityReady && isTimerReady && window.lyricsDataCached) {
+                startButton.disabled = false;
+                startButton.textContent = "スタート";
+            }
+        }
 
         // ─── TextAlive API の実装 ───
         function initTextAlive() {
@@ -70,34 +109,19 @@
                     appName: "Song-Fishing-WithMiku",
                     token:"rEmOWtB15JjOdHcY"
                 },
-                autoplay: true,
-                requestedVolume: 50,
-                mediaElement: document.getElementById("media")
+                mediaElement: document.getElementById("media"),
+                mediaBannerPosition: "bottom right"
             });
 
-            // グローバルに保持（jslibから叩けるようにする）
             window.player = player;
-
-            window.PlaySongJS = function() {
-                if(window.player){
-                window.player.requestPlay();
-                console.log("Unityからのリクエストで曲の再生を開始");
-                }
-            };
-            window.PauseSongJS = function() {
-                if(window.player){
-                window.player.requestPause();
-                console.log("Unityからのリクエストで曲の一時停止");
-                }
-            };
 
             player.addListener({
                 onAppReady(app) {
                     console.log("TextAlive API が利用可能になりました。");
-                    console.log("読み込みを開始します。");
+                    // TextAliveホストから起動されて曲が指定されている場合は、そちらに任せる
                     if(!app.songUrl){
-                        console.warn("楽曲URLが指定されていません。デフォルトの楽曲を読み込みます。");
-                        player.createFromSongUrl("https://piapro.jp/t/6W2N/20251215164617");
+                        console.log("楽曲を読み込みます: " + SONG_URL);
+                        player.createFromSongUrl(SONG_URL, SONG_OPTIONS);
                     }
                 },
 
@@ -121,18 +145,29 @@
                         }
                         currentPhrase = currentPhrase.next;
                     }
+                    console.log("歌詞 " + lyricsList.length + " 文字を抽出しました。");
 
                     // JSONにしてUnityのGameManagerへ一括送信
+                    // Unityがまだ起動していない場合に備えて、キャッシュにも残しておく
                     let jsonString = JSON.stringify({ data: lyricsList });
+                    window.lyricsDataCached = jsonString;
                     if(window.unityInstance){
                         console.log("Unityに歌詞データを送信します。");
                         window.unityInstance.SendMessage('GameManager', 'SetSongDataFromJS', jsonString);
                     } else {
-                        // Unityがまだ起動していない場合は、データをキャッシュしておく
                         console.log("Unityがまだ起動していないため、歌詞データをキャッシュします。");
-                        window.lyricsDataCached = jsonString;
                     }
+                    updateStartButton();
                 },
+
+                // requestPlay() はこのイベントの後でないと効かない
+                onTimerReady() {
+                    console.log("再生の準備ができました。");
+                    player.volume = 50;
+                    isTimerReady = true;
+                    updateStartButton();
+                },
+
                 onTimeUpdate(position) {
                     // 現在の再生時間（秒）をUnityにリアルタイム送信
                     if (window.unityInstance) {

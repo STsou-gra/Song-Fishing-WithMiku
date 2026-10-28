@@ -46,12 +46,10 @@ public class GameManager : MonoBehaviour
         songDataList = wrapper.data;
         spawnIndex = 0;
         isSongReady = true;
-        Debug.Log($"TextAliveから {songDataList.Count} 文字の歌詞を受信！曲を再生します。");
+        Debug.Log($"TextAliveから {songDataList.Count} 文字の歌詞を受信！スタートボタンで再生します。");
 
-        // データが届いたら曲を再生する
-#if !UNITY_EDITOR && UNITY_WEBGL
-        PlaySongJS();
-#endif
+        // 再生はHTML側のスタートボタンから始める
+        // （ブラウザはユーザーのクリックがないと音を鳴らせないため、ここで PlaySongJS() は呼ばない）
     }
 
     // ★ JavaScriptから現在の再生時間（秒）を受け取る
